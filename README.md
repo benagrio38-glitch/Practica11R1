@@ -65,8 +65,8 @@ El código está en `lib/`: `main.dart`, `modelos.dart`, `estado.dart`, `widgets
 
 ## 5. Demostración al docente
 
-- Dispositivo/emulador usado: COMPLETAR
-- Fecha y modalidad de la demostración: COMPLETAR
+- Dispositivo/emulador usado: laptop Dell con Windows, app corriendo en el navegador Microsoft Edge (`flutter run`, Edge)
+- Fecha y modalidad de la demostración: lunes 9 de noviembre de 2026, presencial
 
 ## 6. Screenshots
 
