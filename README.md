@@ -97,3 +97,9 @@ El código está en `lib/`: `main.dart`, `modelos.dart`, `estado.dart`, `widgets
 ![Navegación: Mis boletos después de comprar](screenshots/14-navegacion.png)
 ![Solicitudes del proveedor](screenshots/15-solicitudes-proveedor.png)
 ![Dashboard del organizador con datos](screenshots/16-dashboard-organizador-ana.png)
+
+## Pruebas autom�ticas
+
+Resultado de `flutter test`:
+
+![flutter test](screenshots/17-flutter-test.png)
