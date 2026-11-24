@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../estado.dart';
 import '../widgets_comunes.dart';
 import 'inicio_page.dart';
+import 'recuperar_page.dart';
 import 'registro_page.dart';
 
 class LoginPage extends StatefulWidget {
@@ -68,7 +69,7 @@ class _LoginPageState extends State<LoginPage> {
                         textAlign: TextAlign.center,
                         style: tema.textTheme.headlineMedium
                             ?.copyWith(fontWeight: FontWeight.bold)),
-                    Text('Inicia sesión para continuar',
+                    Text('Inicia sesión para entrar',
                         textAlign: TextAlign.center,
                         style: tema.textTheme.bodyMedium),
                     const SizedBox(height: 24),
@@ -105,6 +106,13 @@ class _LoginPageState extends State<LoginPage> {
                       onPressed: _entrar,
                       icon: const Icon(Icons.login),
                       label: const Text('Iniciar sesión'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                            builder: (_) => const RecuperarPage()),
+                      ),
+                      child: const Text('¿Olvidaste tu contraseña?'),
                     ),
                     TextButton(
                       onPressed: () => Navigator.of(context).push(
@@ -153,3 +161,4 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 }
+

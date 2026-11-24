@@ -134,6 +134,12 @@ class _RegistroPageState extends State<RegistroPage> {
                     ),
                     const SizedBox(height: 8),
                     Text(_rol.descripcion, style: tema.textTheme.bodySmall),
+                    const SizedBox(height: 4),
+                    Text(
+                        'Cada cuenta tiene un solo rol. Si también quieres '
+                        'ser proveedor u organizador, crea otra cuenta.',
+                        style: tema.textTheme.bodySmall
+                            ?.copyWith(fontStyle: FontStyle.italic)),
                     const SizedBox(height: 8),
                     CheckboxListTile(
                       contentPadding: EdgeInsets.zero,

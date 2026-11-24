@@ -2,9 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../estado.dart';
+import 'inicio_page.dart';
 import 'login_page.dart';
 
-// Pantalla de carga inicial. Se queda 3 segundos y pasa al login.
+// Pantalla de carga inicial. Se queda 3 segundos, revisa si hay una sesión
+// activa y manda al dashboard del rol o al login.
 class SplashPage extends StatefulWidget {
   const SplashPage({super.key});
 
@@ -20,8 +23,11 @@ class _SplashPageState extends State<SplashPage> {
     super.initState();
     _temporizador = Timer(const Duration(seconds: 3), () {
       if (!mounted) return;
+      final haySesion = AppScope.leer(context).actual != null;
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const LoginPage()),
+        MaterialPageRoute(
+          builder: (_) => haySesion ? const InicioPage() : const LoginPage(),
+        ),
       );
     });
   }

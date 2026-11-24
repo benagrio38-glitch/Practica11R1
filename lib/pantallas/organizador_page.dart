@@ -3,10 +3,17 @@ import 'package:flutter/material.dart';
 import '../estado.dart';
 import '../modelos.dart';
 import '../widgets_comunes.dart';
+import 'boletos_vendidos_page.dart';
+import 'detalle_fiesta_page.dart';
 import 'formulario_party.dart';
 import 'inicio_page.dart';
+import 'presupuesto_page.dart';
+import 'servicios_pages.dart';
+import 'solicitudes_pages.dart';
 
-// Dashboard del organizador: resumen, sus parties y servicios para contratar.
+// Dashboard del organizador. Navegación mínima del documento:
+// Inicio, Mis fiestas, Boletos, Servicios y solicitudes, Presupuesto
+// (el perfil está en el botón con su nombre, arriba a la derecha).
 class DashboardOrganizador extends StatelessWidget {
   const DashboardOrganizador({super.key});
 
@@ -16,27 +23,33 @@ class DashboardOrganizador extends StatelessWidget {
       titulo: 'Organizador',
       destinos: const [
         NavigationDestination(
-          icon: Icon(Icons.dashboard_outlined),
-          selectedIcon: Icon(Icons.dashboard),
-          label: 'Resumen',
-        ),
+            icon: Icon(Icons.dashboard_outlined),
+            selectedIcon: Icon(Icons.dashboard),
+            label: 'Inicio'),
         NavigationDestination(
-          icon: Icon(Icons.celebration_outlined),
-          selectedIcon: Icon(Icons.celebration),
-          label: 'Mis parties',
-        ),
+            icon: Icon(Icons.celebration_outlined),
+            selectedIcon: Icon(Icons.celebration),
+            label: 'Mis fiestas'),
         NavigationDestination(
-          icon: Icon(Icons.storefront_outlined),
-          selectedIcon: Icon(Icons.storefront),
-          label: 'Servicios',
-        ),
+            icon: Icon(Icons.confirmation_number_outlined),
+            selectedIcon: Icon(Icons.confirmation_number),
+            label: 'Boletos'),
+        NavigationDestination(
+            icon: Icon(Icons.storefront_outlined),
+            selectedIcon: Icon(Icons.storefront),
+            label: 'Servicios'),
+        NavigationDestination(
+            icon: Icon(Icons.savings_outlined),
+            selectedIcon: Icon(Icons.savings),
+            label: 'Presupuesto'),
       ],
       paginas: const [
         ResumenOrganizador(),
-        PartiesOrganizador(),
-        ServiciosParaOrganizador(),
+        MisFiestas(),
+        BoletosOrganizador(),
+        ServiciosOrganizador(),
+        PresupuestoOrganizador(),
       ],
-      // El botón de nueva party solo aparece en la pestaña "Mis parties".
       botonFlotante: (indice) {
         if (indice != 1) return null;
         return FloatingActionButton.extended(
@@ -44,289 +57,361 @@ class DashboardOrganizador extends StatelessWidget {
             MaterialPageRoute(builder: (_) => const FormularioParty()),
           ),
           icon: const Icon(Icons.add),
-          label: const Text('Nueva party'),
+          label: const Text('Nueva fiesta'),
         );
       },
     );
   }
 }
 
+// ---------------------------------------------------------------------------
+// Inicio: fiestas, boletos vendidos contra invitados esperados, presupuesto
+// contra gastos, solicitudes pendientes e ingresos.
+// ---------------------------------------------------------------------------
 class ResumenOrganizador extends StatelessWidget {
   const ResumenOrganizador({super.key});
 
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
-    final mis = app.partiesDelOrganizador;
-    final vendidos = mis.fold<int>(0, (suma, p) => suma + p.vendidos);
-    final ingresos =
-        mis.fold<double>(0, (suma, p) => suma + p.vendidos * p.precioBoleto);
-    final solicitudes = app.solicitudesDelOrganizador;
-    final gasto = solicitudes
-        .where((s) => s.estado == 'Aceptada')
-        .fold<double>(0, (suma, s) => suma + s.servicio.precio);
+    final mis = app.fiestas.delOrganizador(app.yo);
+    final activas =
+        mis.where((p) => p.estado != EstadoParty.cancelada).toList();
+    final vendidos =
+        activas.fold<int>(0, (s, p) => s + app.boletos.vendidos(p));
+    final esperados =
+        activas.fold<int>(0, (s, p) => s + p.invitadosEsperados);
+    var presupuesto = Dinero.cero, gastado = Dinero.cero, ingresos = Dinero.cero;
+    for (final p in activas) {
+      final r = app.presupuesto.resumen(p);
+      presupuesto += r.presupuesto;
+      gastado += r.gastado;
+      ingresos += r.recaudado;
+    }
+    final solicitudes = app.solicitudes.delOrganizador(app.yo);
+    final abiertas = solicitudes.where((s) => s.estado.abierta).length;
+    final porResponder =
+        solicitudes.where((s) => s.estado == EstadoSolicitud.cotizada).toList();
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        const Imagen('assets/images/equipo.jpg', alto: 150),
+        const Imagen('assets/images/equipo.jpg', alto: 130),
         const SizedBox(height: 12),
-        Text('Hola, ${app.actual!.nombre}',
+        Text('Hola, ${app.yo.nombre}',
             style: Theme.of(context)
                 .textTheme
                 .headlineSmall
                 ?.copyWith(fontWeight: FontWeight.bold)),
         const Text('Así va la organización de tus fiestas.'),
         const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: Estadistica(
-                icono: Icons.celebration,
-                valor: '${mis.length}',
-                etiqueta: 'Parties',
-              ),
-            ),
-            Expanded(
-              child: Estadistica(
-                icono: Icons.confirmation_number,
-                valor: '$vendidos',
-                etiqueta: 'Boletos vendidos',
-              ),
-            ),
-          ],
+        ParEstadisticas(
+          Estadistica(
+              icono: Icons.celebration,
+              valor: '${activas.length}',
+              etiqueta: 'Fiestas activas'),
+          Estadistica(
+              icono: Icons.pending_actions,
+              valor: '$abiertas',
+              etiqueta: 'Solicitudes abiertas'),
         ),
-        Row(
-          children: [
-            Expanded(
-              child: Estadistica(
-                icono: Icons.attach_money,
-                valor: dinero(ingresos),
-                etiqueta: 'Ingresos por boletos',
-              ),
-            ),
-            Expanded(
-              child: Estadistica(
-                icono: Icons.shopping_cart,
-                valor: dinero(gasto),
-                etiqueta: 'Servicios contratados',
-              ),
-            ),
-          ],
-        ),
-        const TituloSeccion('Mis solicitudes'),
-        if (solicitudes.isEmpty)
-          const Text('Todavía no has pedido servicios. Ve a la pestaña '
-              'Servicios para cotizar.')
-        else
-          for (final s in solicitudes)
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.send),
-                title: Text(s.servicio.nombre),
-                subtitle: Text('Para: ${s.party.nombre}'),
-                trailing: Chip(label: Text(s.estado)),
-              ),
-            ),
-      ],
-    );
-  }
-}
-
-// Lista principal: las parties del organizador.
-class PartiesOrganizador extends StatelessWidget {
-  const PartiesOrganizador({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final mis = AppScope.of(context).partiesDelOrganizador;
-
-    // Estado vacío cuando todavía no hay parties.
-    if (mis.isEmpty) {
-      return const EstadoVacio(
-        icono: Icons.celebration_outlined,
-        titulo: 'No hay parties',
-        mensaje: 'Todavía no creas ninguna. Toca "Nueva party" para empezar.',
-      );
-    }
-
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-      children: [
-        for (final p in mis)
-          Card(
-            clipBehavior: Clip.antiAlias,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(p.nombre,
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleLarge
-                          ?.copyWith(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  Row(children: [
-                    const Icon(Icons.event, size: 18),
-                    const SizedBox(width: 6),
-                    Text(p.fecha),
-                  ]),
-                  const SizedBox(height: 4),
-                  Row(children: [
-                    const Icon(Icons.place, size: 18),
-                    const SizedBox(width: 6),
-                    Expanded(child: Text(p.lugar)),
-                  ]),
-                  const SizedBox(height: 12),
-                  LinearProgressIndicator(value: p.vendidos / p.invitados),
-                  const SizedBox(height: 6),
-                  Text('${p.vendidos} de ${p.invitados} boletos vendidos'),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Boleto: ${dinero(p.precioBoleto)} · '
-                    'Presupuesto: ${dinero(p.presupuesto)}',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Boletos vendidos vs. invitados esperados'),
+                const SizedBox(height: 8),
+                Progreso(
+                    valor: vendidos,
+                    total: esperados,
+                    texto: '$vendidos de $esperados invitados esperados'),
+                const SizedBox(height: 16),
+                const Text('Gastos vs. presupuesto'),
+                const SizedBox(height: 8),
+                Progreso(
+                    valor: gastado.centavos,
+                    total: presupuesto.centavos,
+                    texto:
+                        '${dinero(gastado)} de ${dinero(presupuesto)} usados'),
+              ],
             ),
           ),
+        ),
+        ParEstadisticas(
+          Estadistica(
+              icono: Icons.attach_money,
+              valor: dinero(ingresos),
+              etiqueta: 'Ingresos por boletos'),
+          Estadistica(
+              icono: Icons.shopping_cart,
+              valor: dinero(gastado),
+              etiqueta: 'Gastado'),
+        ),
+        TituloSeccion('Cotizaciones por responder (${porResponder.length})'),
+        if (porResponder.isEmpty)
+          const Text('No tienes cotizaciones pendientes de respuesta.')
+        else
+          for (final s in porResponder) TarjetaSolicitud(solicitud: s),
       ],
     );
   }
 }
 
-// Lista secundaria: servicios que ofrecen los proveedores.
-class ServiciosParaOrganizador extends StatefulWidget {
-  const ServiciosParaOrganizador({super.key});
+// ---------------------------------------------------------------------------
+// Lista de mis fiestas con filtros por fecha y estado.
+// ---------------------------------------------------------------------------
+class MisFiestas extends StatefulWidget {
+  const MisFiestas({super.key});
 
   @override
-  State<ServiciosParaOrganizador> createState() =>
-      _ServiciosParaOrganizadorState();
+  State<MisFiestas> createState() => _MisFiestasState();
 }
 
-class _ServiciosParaOrganizadorState extends State<ServiciosParaOrganizador> {
-  String _filtro = 'Todos';
+enum _Cuando { todas, proximas, pasadas }
 
-  Future<void> _solicitar(Servicio servicio) async {
-    final app = AppScope.leer(context);
-    final mis = app.partiesDelOrganizador;
-    if (mis.isEmpty) {
-      mostrarAviso(context, 'Primero crea una party para poder cotizar');
-      return;
-    }
-    // Se elige para cuál party es el servicio.
-    final party = await showModalBottomSheet<Party>(
-      context: context,
-      builder: (contextoHoja) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text('¿Para qué party?',
-                  style: Theme.of(contextoHoja).textTheme.titleLarge),
-            ),
-            for (final p in mis)
-              ListTile(
-                leading: const Icon(Icons.celebration),
-                title: Text(p.nombre),
-                subtitle: Text(p.fecha),
-                onTap: () => Navigator.of(contextoHoja).pop(p),
-              ),
-          ],
-        ),
-      ),
-    );
-    if (party == null || !mounted) return;
-    mostrarAviso(context, app.solicitarServicio(servicio, party));
-  }
+class _MisFiestasState extends State<MisFiestas> {
+  EstadoParty? _estado;
+  _Cuando _cuando = _Cuando.todas;
 
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
-    final lista = app.servicios
-        .where((s) => _filtro == 'Todos' || s.tipo == _filtro)
-        .toList();
+    final ahora = app.reloj();
+    final todas = app.fiestas.delOrganizador(app.yo);
+    final lista = todas.where((p) {
+      if (_estado != null && p.estado != _estado) return false;
+      if (_cuando == _Cuando.proximas && p.fechaHoraInicio.isBefore(ahora)) {
+        return false;
+      }
+      if (_cuando == _Cuando.pasadas && !p.fechaHoraInicio.isBefore(ahora)) {
+        return false;
+      }
+      return true;
+    }).toList();
+
+    if (todas.isEmpty) {
+      return const EstadoVacio(
+        icono: Icons.celebration_outlined,
+        titulo: 'No hay fiestas',
+        mensaje: 'Todavía no creas ninguna. Toca "Nueva fiesta" para empezar.',
+      );
+    }
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
       children: [
-        Wrap(
-          spacing: 8,
-          children: [
-            for (final f in const ['Todos', 'Salón', 'Alberca', 'DJ'])
-              ChoiceChip(
-                label: Text(f),
-                selected: _filtro == f,
-                onSelected: (_) => setState(() => _filtro = f),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(children: [
+            for (final e in [null, ...EstadoParty.values])
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ChoiceChip(
+                  label: Text(e?.nombre ?? 'Todas'),
+                  selected: _estado == e,
+                  onSelected: (_) => setState(() => _estado = e),
+                ),
               ),
+          ]),
+        ),
+        const SizedBox(height: 8),
+        SegmentedButton<_Cuando>(
+          segments: const [
+            ButtonSegment(value: _Cuando.todas, label: Text('Todas')),
+            ButtonSegment(value: _Cuando.proximas, label: Text('Próximas')),
+            ButtonSegment(value: _Cuando.pasadas, label: Text('Pasadas')),
           ],
+          selected: {_cuando},
+          onSelectionChanged: (s) => setState(() => _cuando = s.first),
         ),
         const SizedBox(height: 12),
         if (lista.isEmpty)
           const SizedBox(
-            height: 300,
+            height: 260,
             child: EstadoVacio(
-              icono: Icons.search_off,
-              titulo: 'No hay servicios',
-              mensaje: 'No hay servicios de este tipo por ahora.',
-            ),
+                icono: Icons.filter_alt_off,
+                titulo: 'Sin resultados',
+                mensaje: 'No hay fiestas con esos filtros.'),
           ),
-        for (final s in lista)
-          Card(
-            clipBehavior: Clip.antiAlias,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Image.asset(
-                  s.imagen,
-                  height: 140,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stack) => const SizedBox(
-                    height: 140,
-                    child: Center(child: Icon(Icons.celebration, size: 40)),
-                  ),
+        for (final p in lista) TarjetaFiestaOrganizador(party: p),
+      ],
+    );
+  }
+}
+
+class TarjetaFiestaOrganizador extends StatelessWidget {
+  const TarjetaFiestaOrganizador({super.key, required this.party, this.destino});
+
+  final Party party;
+  final Widget Function(Party)? destino;
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final p = party;
+    final vendidos = app.boletos.vendidos(p);
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) =>
+                destino?.call(p) ?? DetalleFiestaPage(partyId: p.idParty))),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Expanded(
+                  child: Text(p.nombre,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(fontWeight: FontWeight.bold)),
                 ),
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('${s.nombre} · ${s.tipo}',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 4),
-                      Text(s.descripcion),
-                      const SizedBox(height: 4),
-                      Text('Proveedor: ${s.proveedorNombre}',
-                          style: Theme.of(context).textTheme.bodySmall),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Text(dinero(s.precio),
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.primary,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 18,
-                              )),
-                          const Spacer(),
-                          FilledButton.tonal(
-                            onPressed: () => _solicitar(s),
-                            child: const Text('Cotizar'),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+                ChipEstado.party(p.estado),
+              ]),
+              const SizedBox(height: 8),
+              Dato(Icons.event, horario(p.fechaHoraInicio, p.fechaHoraFin)),
+              Dato(Icons.place, p.lugar.publico),
+              const SizedBox(height: 8),
+              Progreso(
+                  valor: vendidos,
+                  total: p.aforoMaximo,
+                  texto: '$vendidos de ${p.aforoMaximo} boletos vendidos'),
+            ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Boletos: el organizador elige una fiesta para ver sus boletos vendidos.
+// ---------------------------------------------------------------------------
+class BoletosOrganizador extends StatelessWidget {
+  const BoletosOrganizador({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final mis = app.fiestas
+        .delOrganizador(app.yo)
+        .where((p) => p.estado != EstadoParty.borrador)
+        .toList();
+    if (mis.isEmpty) {
+      return const EstadoVacio(
+          icono: Icons.confirmation_number_outlined,
+          titulo: 'Sin boletos',
+          mensaje: 'Publica una fiesta para empezar a vender boletos.');
+    }
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        const Text('Elige una fiesta para ver a sus asistentes y validar la '
+            'entrada.'),
+        const SizedBox(height: 8),
+        for (final p in mis)
+          TarjetaFiestaOrganizador(
+              party: p,
+              destino: (p) => BoletosVendidosPage(partyId: p.idParty)),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Servicios y solicitudes: catálogo y "Mis solicitudes".
+// ---------------------------------------------------------------------------
+class ServiciosOrganizador extends StatefulWidget {
+  const ServiciosOrganizador({super.key});
+
+  @override
+  State<ServiciosOrganizador> createState() => _ServiciosOrganizadorState();
+}
+
+class _ServiciosOrganizadorState extends State<ServiciosOrganizador> {
+  int _vista = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: SegmentedButton<int>(
+            segments: const [
+              ButtonSegment(
+                  value: 0,
+                  icon: Icon(Icons.storefront),
+                  label: Text('Catálogo')),
+              ButtonSegment(
+                  value: 1,
+                  icon: Icon(Icons.send),
+                  label: Text('Mis solicitudes')),
+            ],
+            selected: {_vista},
+            onSelectionChanged: (s) => setState(() => _vista = s.first),
+          ),
+        ),
+        Expanded(
+          child: _vista == 0
+              ? const CatalogoServicios()
+              : const ListaSolicitudes(comoProveedor: false),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Presupuesto: resumen por fiesta.
+// ---------------------------------------------------------------------------
+class PresupuestoOrganizador extends StatelessWidget {
+  const PresupuestoOrganizador({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final mis = app.fiestas
+        .delOrganizador(app.yo)
+        .where((p) => p.estado != EstadoParty.cancelada)
+        .toList();
+    if (mis.isEmpty) {
+      return const EstadoVacio(
+          icono: Icons.savings_outlined,
+          titulo: 'Sin presupuestos',
+          mensaje: 'Crea una fiesta para llevar su presupuesto.');
+    }
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        for (final p in mis)
+          Builder(builder: (context) {
+            final r = app.presupuesto.resumen(p);
+            return Card(
+              child: ListTile(
+                contentPadding: const EdgeInsets.all(16),
+                leading: const CircleAvatar(child: Icon(Icons.savings)),
+                title: Text(p.nombre),
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Progreso(
+                      valor: r.gastado.centavos,
+                      total: r.presupuesto.centavos,
+                      texto: 'Gastado ${dinero(r.gastado)} de '
+                          '${dinero(r.presupuesto)} · Recaudado '
+                          '${dinero(r.recaudado)}'),
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => PresupuestoPage(partyId: p.idParty))),
+              ),
+            );
+          }),
       ],
     );
   }

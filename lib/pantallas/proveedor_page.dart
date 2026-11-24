@@ -5,8 +5,12 @@ import '../modelos.dart';
 import '../widgets_comunes.dart';
 import 'formulario_servicio.dart';
 import 'inicio_page.dart';
+import 'perfil_page.dart';
+import 'servicios_pages.dart';
+import 'solicitudes_pages.dart';
 
-// Dashboard del proveedor (salones, albercas y DJs).
+// Dashboard del proveedor. Navegación mínima del documento:
+// Inicio, Mis servicios, Solicitudes y cotizaciones, Perfil.
 class DashboardProveedor extends StatelessWidget {
   const DashboardProveedor({super.key});
 
@@ -16,25 +20,27 @@ class DashboardProveedor extends StatelessWidget {
       titulo: 'Proveedor',
       destinos: const [
         NavigationDestination(
-          icon: Icon(Icons.dashboard_outlined),
-          selectedIcon: Icon(Icons.dashboard),
-          label: 'Resumen',
-        ),
+            icon: Icon(Icons.dashboard_outlined),
+            selectedIcon: Icon(Icons.dashboard),
+            label: 'Inicio'),
         NavigationDestination(
-          icon: Icon(Icons.storefront_outlined),
-          selectedIcon: Icon(Icons.storefront),
-          label: 'Mis servicios',
-        ),
+            icon: Icon(Icons.storefront_outlined),
+            selectedIcon: Icon(Icons.storefront),
+            label: 'Mis servicios'),
         NavigationDestination(
-          icon: Icon(Icons.inbox_outlined),
-          selectedIcon: Icon(Icons.inbox),
-          label: 'Solicitudes',
-        ),
+            icon: Icon(Icons.inbox_outlined),
+            selectedIcon: Icon(Icons.inbox),
+            label: 'Solicitudes'),
+        NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person),
+            label: 'Perfil'),
       ],
       paginas: const [
         ResumenProveedor(),
         MisServicios(),
-        SolicitudesProveedor(),
+        ListaSolicitudes(comoProveedor: true),
+        PerfilPage(comoPestana: true),
       ],
       botonFlotante: (indice) {
         if (indice != 1) return null;
@@ -50,79 +56,80 @@ class DashboardProveedor extends StatelessWidget {
   }
 }
 
+// Inicio: solicitudes nuevas, cotizaciones pendientes, servicios publicados y
+// cotizaciones aceptadas.
 class ResumenProveedor extends StatelessWidget {
   const ResumenProveedor({super.key});
 
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
-    final solicitudes = app.solicitudesDelProveedor;
-    final pendientes = solicitudes.where((s) => s.estado == 'Pendiente').length;
-    final aceptadas = solicitudes.where((s) => s.estado == 'Aceptada');
-    final ingresos =
-        aceptadas.fold<double>(0, (suma, s) => suma + s.servicio.precio);
+    final solicitudes = app.solicitudes.delProveedor(app.yo);
+    final nuevas =
+        solicitudes.where((s) => s.estado == EstadoSolicitud.pendiente).toList();
+    final cotizadas =
+        solicitudes.where((s) => s.estado == EstadoSolicitud.cotizada).length;
+    final aceptadas =
+        solicitudes.where((s) => s.estado == EstadoSolicitud.aceptada).toList();
+    final ingresos = aceptadas.fold(
+        Dinero.cero, (s, x) => s + (x.cotizacionVigente?.precio ?? Dinero.cero));
+    final publicados =
+        app.catalogo.delProveedor(app.yo).where((s) => s.activo).length;
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        const Imagen('assets/images/quinta_pinos.jpg', alto: 150),
+        const Imagen('assets/images/quinta_pinos.jpg', alto: 130),
         const SizedBox(height: 12),
-        Text('Hola, ${app.actual!.nombre}',
+        Text('Hola, ${app.yo.nombreNegocio ?? app.yo.nombre}',
             style: Theme.of(context)
                 .textTheme
                 .headlineSmall
                 ?.copyWith(fontWeight: FontWeight.bold)),
-        const Text('Administra tus servicios y tus solicitudes.'),
+        const Text('Administra tus servicios y tus cotizaciones.'),
         const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: Estadistica(
-                icono: Icons.storefront,
-                valor: '${app.serviciosDelProveedor.length}',
-                etiqueta: 'Servicios',
-              ),
-            ),
-            Expanded(
-              child: Estadistica(
-                icono: Icons.pending_actions,
-                valor: '$pendientes',
-                etiqueta: 'Pendientes',
-              ),
-            ),
-          ],
+        ParEstadisticas(
+          Estadistica(
+              icono: Icons.mark_email_unread,
+              valor: '${nuevas.length}',
+              etiqueta: 'Solicitudes nuevas'),
+          Estadistica(
+              icono: Icons.request_quote,
+              valor: '$cotizadas',
+              etiqueta: 'Cotizaciones sin respuesta'),
         ),
-        Row(
-          children: [
-            Expanded(
-              child: Estadistica(
-                icono: Icons.check_circle,
-                valor: '${aceptadas.length}',
-                etiqueta: 'Aceptadas',
-              ),
-            ),
-            Expanded(
-              child: Estadistica(
-                icono: Icons.attach_money,
-                valor: dinero(ingresos),
-                etiqueta: 'Ingresos',
-              ),
-            ),
-          ],
+        ParEstadisticas(
+          Estadistica(
+              icono: Icons.storefront,
+              valor: '$publicados',
+              etiqueta: 'Servicios publicados'),
+          Estadistica(
+              icono: Icons.check_circle,
+              valor: '${aceptadas.length}',
+              etiqueta: 'Cotizaciones aceptadas'),
         ),
+        Estadistica(
+            icono: Icons.attach_money,
+            valor: dinero(ingresos),
+            etiqueta: 'Ingresos por cotizaciones aceptadas'),
+        TituloSeccion('Por responder (${nuevas.length})'),
+        if (nuevas.isEmpty)
+          const Text('No tienes solicitudes nuevas.')
+        else
+          for (final s in nuevas) TarjetaSolicitud(solicitud: s),
       ],
     );
   }
 }
 
-// Lista principal: los servicios que ofrece el proveedor.
+// Mis servicios: editar, marcar disponibilidad y desactivar (baja lógica).
 class MisServicios extends StatelessWidget {
   const MisServicios({super.key});
 
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
-    final lista = app.serviciosDelProveedor;
+    final lista = app.catalogo.delProveedor(app.yo);
 
     if (lista.isEmpty) {
       return const EstadoVacio(
@@ -135,107 +142,29 @@ class MisServicios extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
       children: [
+        const Text('Los servicios no se borran: se desactivan para conservar '
+            'el historial de solicitudes.'),
+        const SizedBox(height: 8),
         for (final s in lista)
-          Card(
-            clipBehavior: Clip.antiAlias,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Image.asset(
-                  s.imagen,
-                  height: 120,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stack) => const SizedBox(
-                    height: 120,
-                    child: Center(child: Icon(Icons.celebration, size: 40)),
-                  ),
-                ),
-                ListTile(
-                  title: Text('${s.nombre} · ${s.tipo}'),
-                  subtitle: Text('${s.descripcion}\n${dinero(s.precio)}'),
-                  isThreeLine: true,
-                  trailing: IconButton(
-                    tooltip: 'Eliminar',
-                    icon: const Icon(Icons.delete_outline),
-                    onPressed: () {
-                      app.eliminarServicio(s);
-                      mostrarAviso(context, 'Servicio eliminado');
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-// Lista secundaria: solicitudes que mandan los organizadores.
-class SolicitudesProveedor extends StatelessWidget {
-  const SolicitudesProveedor({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final app = AppScope.of(context);
-    final lista = app.solicitudesDelProveedor;
-
-    if (lista.isEmpty) {
-      return const EstadoVacio(
-        icono: Icons.inbox_outlined,
-        titulo: 'No hay solicitudes',
-        mensaje: 'Cuando un organizador te cotice, aparecerá aquí.',
-      );
-    }
-
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        for (final Solicitud s in lista)
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(s.servicio.nombre,
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
-                                ?.copyWith(fontWeight: FontWeight.bold)),
-                      ),
-                      Chip(label: Text(s.estado)),
-                    ],
-                  ),
-                  Text('Party: ${s.party.nombre} (${s.party.fecha})'),
-                  Text('Organiza: ${s.party.organizadorNombre}'),
-                  Text('Precio: ${dinero(s.servicio.precio)}'),
-                  if (s.estado == 'Pendiente') ...[
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        OutlinedButton(
-                          onPressed: () =>
-                              app.responderSolicitud(s, 'Rechazada'),
-                          child: const Text('Rechazar'),
-                        ),
-                        const SizedBox(width: 8),
-                        FilledButton(
-                          onPressed: () =>
-                              app.responderSolicitud(s, 'Aceptada'),
-                          child: const Text('Aceptar'),
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
+          TarjetaServicio(
+            servicio: s,
+            acciones: Row(children: [
+              TextButton.icon(
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => FormularioServicio(servicio: s))),
+                icon: const Icon(Icons.edit),
+                label: const Text('Editar'),
               ),
-            ),
+              const Spacer(),
+              Text(s.activo ? 'Activo' : 'Desactivado'),
+              Switch(
+                value: s.activo,
+                onChanged: (v) => resultado(
+                    context,
+                    app.hacer(() => app.catalogo.cambiarActivo(app.yo, s, v)),
+                    exito: v ? 'Servicio activado' : 'Servicio desactivado'),
+              ),
+            ]),
           ),
       ],
     );
